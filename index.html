@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Murmur</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      background: #111;
+      color: #eee;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    h1 { font-size: 20px; }
+    #timer {
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      color: #888;
+    }
+    #timer.active { color: #ef4444; }
+    #status {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 16px;
+      min-height: 20px;
+    }
+    #btn {
+      width: 100%;
+      padding: 16px;
+      font-size: 18px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      transition: background 0.2s;
+    }
+    #btn:disabled {
+      background: #333;
+      color: #666;
+      cursor: not-allowed;
+    }
+    #btn.recording {
+      background: #dc2626;
+    }
+    #output {
+      margin-top: 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .line {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .line .ts {
+      flex-shrink: 0;
+      color: #555;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      padding-top: 2px;
+    }
+    .line .text {
+      color: #ccc;
+      word-break: break-word;
+    }
+    .line.partial .text {
+      color: #666;
+      font-style: italic;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #222;
+    }
+    .actions button {
+      flex: 1;
+      padding: 12px;
+      font-size: 14px;
+      border: 1px solid #333;
+      border-radius: 10px;
+      cursor: pointer;
+      background: #222;
+      color: #888;
+      transition: all 0.2s;
+    }
+    .actions button:active { background: #333; }
+    .actions button.flash {
+      color: #4ade80;
+      border-color: #4ade80;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Murmur</h1>
+    <div id="timer">00:00</div>
+  </header>
+  <div id="status">Loading...</div>
+  <button id="btn" disabled>Start Meeting</button>
+  <div id="output"></div>
+  <div class="actions">
+    <button id="copyBtn">Copy</button>
+    <button id="downloadBtn">Download .txt</button>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "murmur2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@moonshine-ai/moonshine-js": "^0.1.29"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "vite": "^6"
+  }
+}

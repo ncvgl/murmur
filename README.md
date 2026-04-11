@@ -19,7 +19,4 @@ Companies charge $10-30/month for meeting transcription because they run expensi
 ~90% accuracy (vs 95% for cloud services). But it's private, offline, and free forever.
 <br>And honestly? LLMs don't care about perfect transcripts - they understand the meaning anyway.
 
-**Try it:** [murmur.ncvgl.com](https://murmur.ncvgl.com)
-<br>**Star it:** [github.com/ncvgl/murmur](https://github.com/ncvgl/murmur)
-
 Runs on phones too.

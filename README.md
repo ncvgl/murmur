@@ -1,7 +1,8 @@
-<p align="center"><strong><font size="6">Murmur</font></strong></p>
-<p align="center">Meeting recorders charge $10/month. I made one that's free. Forever.</p>
-<p align="center">No installation. No backend. No API costs. No data leaving your computer.</p>
-<p align="center">Just open <a href="https://murmur.ncvgl.com">murmur.ncvgl.com</a> and click Start. Works on Zoom, Meet, Teams - anything.</p>
+# Murmur
+
+Meeting recorders charge $10/month. I made one that's free. Forever.
+<br>No installation. No backend. No API costs. No data leaving your computer.
+<br>Just open <a href="https://murmur.ncvgl.com">murmur.ncvgl.com</a> and click Start. Works on Zoom, Meet, Teams - anything.
 
 ### How it works
 

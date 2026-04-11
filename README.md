@@ -16,7 +16,7 @@ Companies charge $10-30/month for meeting transcription because they run expensi
 
 ### The tradeoff
 
-~90% accuracy (vs 95% for cloud services). But it's private, offline, and free forever.
-<br>And honestly? LLMs don't care about perfect transcripts - they understand the meaning anyway.
+90% accuracy. English only. No speaker labelling. 
+<br>But honestly? LLMs don't care about perfect transcripts - they understand the meaning anyway.
 
 Runs on phones too.

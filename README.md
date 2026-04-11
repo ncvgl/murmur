@@ -7,7 +7,7 @@ Meeting recorders charge $10/month. I made one that's free. Forever.
 ### How it works
 
 Moonshine v1, a state-of-the-art speech model from ex-Googlers, runs locally in your browser.
-<br> It listens to your mic + speakers. Transcribes everything. Keeps it on your device.
+<br> It listens to your mic + speakers. Transcribes everything in real-time. Keeps it on your device.
 
 ### Why this matters
 

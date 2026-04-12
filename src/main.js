@@ -22,11 +22,8 @@ function formatTime(ms) {
 }
 
 function getTimestamp() {
-  const d = new Date();
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${h}:${m}:${s}`;
+  if (!startTime) return "00:00";
+  return formatTime(Date.now() - startTime);
 }
 
 function startTimer() {
@@ -90,8 +87,10 @@ function makeLine(text, timestamp, isPartial) {
   return line;
 }
 
-// Create transcriber once. Streaming mode (useVAD=false) for live partials.
-const transcriber = new Moonshine.MicrophoneTranscriber(
+// Base Transcriber (not MicrophoneTranscriber) so we can supply a stream with
+// echoCancellation: false — lets the mic acoustically pick up the remote
+// speaker's voice from laptop speakers. Without this, the browser filters it.
+const transcriber = new Moonshine.Transcriber(
   "model/base",
   {
     onModelLoadStarted() {
@@ -138,12 +137,32 @@ const transcriber = new Moonshine.MicrophoneTranscriber(
 status.textContent = "Ready.";
 btn.disabled = false;
 
-btn.addEventListener("click", () => {
+let micStream = null;
+
+btn.addEventListener("click", async () => {
   if (!recording) {
     recording = true;
     btn.textContent = "Loading...";
     btn.disabled = true;
-    transcriber.start();
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: false,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      transcriber.attachStream(micStream);
+      transcriber.start();
+    } catch (err) {
+      console.error("[mic]", err);
+      status.textContent = `Mic error: ${err.message || err}`;
+      btn.disabled = false;
+      btn.textContent = "Start Meeting";
+      recording = false;
+    }
   } else {
     transcriber.stop();
     recording = false;
@@ -153,6 +172,10 @@ btn.addEventListener("click", () => {
     status.textContent = `Stopped at ${timerEl.textContent}.`;
     const partial = document.getElementById("partial");
     if (partial) partial.remove();
+    if (micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      micStream = null;
+    }
   }
 });
 

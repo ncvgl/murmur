@@ -6,7 +6,7 @@
   <img src="public/images/demo.gif" width="720" alt="Murmur demo">
 </p>
 
-Meeting recorders charge $10/month. This one is free. Forever.
+Meeting recorders charge $240/year. This one costs $0. Forever.
 <br>No installation. No backend. No API costs. No data leaving your computer.
 <br>Just open <a href="https://murmur.ncvgl.com">murmur.ncvgl.com</a> on Chrome and click Start. Works on Zoom, Meet, Teams - anything.
 

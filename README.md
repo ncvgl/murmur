@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo-rounded.png" width="300" alt="Murmur">
+</p>
+
 # Murmur
 
 Meeting recorders charge $10/month. I made one that's free. Forever.

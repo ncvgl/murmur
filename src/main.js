@@ -22,8 +22,11 @@ function formatTime(ms) {
 }
 
 function getTimestamp() {
-  if (!startTime) return "00:00";
-  return formatTime(Date.now() - startTime);
+  const d = new Date();
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${h}:${m}:${s}`;
 }
 
 function startTimer() {
@@ -41,6 +44,10 @@ function stopTimer() {
   timerEl.classList.remove("active");
 }
 
+function isNearBottom() {
+  return output.scrollHeight - output.scrollTop - output.clientHeight < 40;
+}
+
 function commitText(text) {
   if (!text.trim()) return;
   const partial = document.getElementById("partial");
@@ -48,9 +55,10 @@ function commitText(text) {
   const tsStart = speechStartTs || getTimestamp();
   const tsEnd = getTimestamp();
   committedLines.push({ text: text.trim(), tsStart, tsEnd });
+  const stick = isNearBottom();
   const line = makeLine(text.trim(), `${tsStart} - ${tsEnd}`, false);
   output.appendChild(line);
-  output.scrollTop = output.scrollHeight;
+  if (stick) output.scrollTop = output.scrollHeight;
   speechStartTs = null;
 }
 
@@ -61,9 +69,10 @@ function updatePartial(text) {
   lastPartialTime = now;
   const partial = document.getElementById("partial");
   if (partial) partial.remove();
+  const stick = isNearBottom();
   const line = makeLine(text.trim(), speechStartTs || getTimestamp(), true);
   output.appendChild(line);
-  output.scrollTop = output.scrollHeight;
+  if (stick) output.scrollTop = output.scrollHeight;
 }
 
 function makeLine(text, timestamp, isPartial) {
@@ -86,9 +95,13 @@ const transcriber = new Moonshine.MicrophoneTranscriber(
   "model/base",
   {
     onModelLoadStarted() {
-      status.textContent = "Downloading model (~63 MB)... Takes 1min";
+      const cached = localStorage.getItem("murmur.modelCached") === "1";
+      status.textContent = cached
+        ? "Loading model..."
+        : "Downloading model (~63 MB)... Takes 1min";
     },
     onModelLoaded() {
+      localStorage.setItem("murmur.modelCached", "1");
       status.textContent = "Model ready.";
     },
     onTranscribeStarted() {

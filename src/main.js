@@ -131,7 +131,7 @@ const transcriber = new Moonshine.Transcriber(
       updatePartial(text);
     },
   },
-  false
+  true
 );
 
 status.textContent = "Ready.";

@@ -18,5 +18,3 @@ Companies charge $10-30/month for meeting transcription because they run expensi
 
 90% accuracy. English only. No speaker labelling. 
 <br>But honestly? LLMs don't care about perfect transcripts - they understand the meaning anyway.
-
-Runs on phones too.

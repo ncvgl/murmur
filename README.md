@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-rounded.png" width="300" alt="Murmur">
+  <img src="public/images/logo-rounded.png" width="300" alt="Murmur">
 </p>
 
 Meeting recorders charge $10/month. I made one that's free. Forever.

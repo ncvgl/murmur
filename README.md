@@ -4,7 +4,7 @@
 
 Meeting recorders charge $10/month. This one is free. Forever.
 <br>No installation. No backend. No API costs. No data leaving your computer.
-<br>Just open <a href="https://murmur.ncvgl.com">murmur.ncvgl.com</a> and click Start. Works on Zoom, Meet, Teams - anything.
+<br>Just open <a href="https://murmur.ncvgl.com">murmur.ncvgl.com</a> on Chrome and click Start. Works on Zoom, Meet, Teams - anything.
 
 ### How it works
 
@@ -14,7 +14,7 @@ Moonshine v1, a state-of-the-art speech model from ex-Googlers, runs locally in 
 ### Why this matters
 
 Companies charge up to $30/month for meeting transcription services.
-<br> This costs $0 because there's no server. The AI runs on YOUR laptop.
+<br> This costs $0 because there's no server. The AI runs on YOUR laptop using WebGPU.
 
 ### The tradeoff
 

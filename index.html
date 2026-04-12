@@ -120,6 +120,11 @@
     <button id="copyBtn">Copy</button>
     <button id="downloadBtn">Download .txt</button>
   </div>
+  <script>
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100dvh;text-align:center;color:#888;font-size:16px;padding:24px;">murmur is desktop only for now.</div>';
+    }
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

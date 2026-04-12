@@ -86,7 +86,7 @@ const transcriber = new Moonshine.MicrophoneTranscriber(
   "model/base",
   {
     onModelLoadStarted() {
-      status.textContent = "Downloading model (~63 MB)...";
+      status.textContent = "Downloading model (~63 MB)... Takes 1min";
     },
     onModelLoaded() {
       status.textContent = "Model ready.";

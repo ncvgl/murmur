@@ -8,6 +8,6 @@ export default defineConfig({
     port: 5173,
   },
   optimizeDeps: {
-    exclude: ["onnxruntime-web"],
+    exclude: ["onnxruntime-web", "@huggingface/transformers"],
   },
 });

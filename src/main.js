@@ -6,6 +6,8 @@ const output = document.getElementById("output");
 const timerEl = document.getElementById("timer");
 const copyBtn = document.getElementById("copyBtn");
 const downloadBtn = document.getElementById("downloadBtn");
+const trToggle = document.getElementById("trToggle");
+const trLang = document.getElementById("trLang");
 
 let recording = false;
 let startTime = null;
@@ -13,6 +15,15 @@ let timerInterval = null;
 let speechStartTs = null;
 let lastPartialTime = 0;
 let committedLines = [];
+let nextSentenceId = 1;
+
+// Translation state
+let trWorker = null;
+let trEnabled = false;
+let trLangCode = trLang.value;
+let trEpoch = 0;
+
+document.body.classList.add("no-translation");
 
 function formatTime(ms) {
   const totalSec = Math.floor(ms / 1000);
@@ -45,18 +56,63 @@ function isNearBottom() {
   return output.scrollHeight - output.scrollTop - output.clientHeight < 40;
 }
 
+function ensureWorker() {
+  if (trWorker) return trWorker;
+  trWorker = new Worker(new URL("./translation-worker.js", import.meta.url), { type: "module" });
+  trWorker.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === "loading") {
+      status.textContent = `Loading translation model (${msg.lang})...`;
+    } else if (msg.type === "ready") {
+      status.textContent = recording ? "Listening..." : "Ready.";
+    } else if (msg.type === "translation") {
+      if (msg.epoch !== trEpoch) return;
+      const line = committedLines.find((l) => l.id === msg.id);
+      if (line) line.translation = msg.text;
+      const cell = output.querySelector(`[data-id="${msg.id}"] .translated`);
+      if (cell) {
+        cell.textContent = msg.text;
+        cell.classList.remove("pending");
+      }
+    } else if (msg.type === "translation_error") {
+      const cell = output.querySelector(`[data-id="${msg.id}"] .translated`);
+      if (cell) {
+        cell.textContent = "(translation failed)";
+        cell.classList.remove("pending");
+      }
+    } else if (msg.type === "error") {
+      status.textContent = `Translation error: ${msg.message}`;
+    }
+  };
+  return trWorker;
+}
+
+function submitTranslation(id, text) {
+  if (!trEnabled) return;
+  ensureWorker().postMessage({
+    type: "translate",
+    id,
+    text,
+    lang: trLangCode,
+    epoch: trEpoch,
+  });
+}
+
 function commitText(text) {
   if (!text.trim()) return;
   const partial = document.getElementById("partial");
   if (partial) partial.remove();
   const tsStart = speechStartTs || getTimestamp();
   const tsEnd = getTimestamp();
-  committedLines.push({ text: text.trim(), tsStart, tsEnd });
+  const id = nextSentenceId++;
+  const entry = { id, text: text.trim(), tsStart, tsEnd, translation: "" };
+  committedLines.push(entry);
   const stick = isNearBottom();
-  const line = makeLine(text.trim(), `${tsStart} - ${tsEnd}`, false);
+  const line = makeLine(text.trim(), `${tsStart} - ${tsEnd}`, false, id, trEnabled);
   output.appendChild(line);
   if (stick) output.scrollTop = output.scrollHeight;
   speechStartTs = null;
+  submitTranslation(id, entry.text);
 }
 
 function updatePartial(text) {
@@ -67,15 +123,16 @@ function updatePartial(text) {
   const partial = document.getElementById("partial");
   if (partial) partial.remove();
   const stick = isNearBottom();
-  const line = makeLine(text.trim(), speechStartTs || getTimestamp(), true);
+  const line = makeLine(text.trim(), speechStartTs || getTimestamp(), true, null, false);
   output.appendChild(line);
   if (stick) output.scrollTop = output.scrollHeight;
 }
 
-function makeLine(text, timestamp, isPartial) {
+function makeLine(text, timestamp, isPartial, id, showTranslation) {
   const line = document.createElement("div");
   line.className = isPartial ? "line partial" : "line";
   if (isPartial) line.id = "partial";
+  if (id != null) line.dataset.id = String(id);
   const ts = document.createElement("span");
   ts.className = "ts";
   ts.textContent = timestamp;
@@ -84,6 +141,12 @@ function makeLine(text, timestamp, isPartial) {
   content.textContent = text;
   line.appendChild(ts);
   line.appendChild(content);
+  if (!isPartial) {
+    const translated = document.createElement("span");
+    translated.className = showTranslation ? "translated pending" : "translated";
+    translated.textContent = showTranslation ? "…" : "";
+    line.appendChild(translated);
+  }
   return line;
 }
 
@@ -179,11 +242,35 @@ btn.addEventListener("click", async () => {
   }
 });
 
+// Translation UI
+trToggle.addEventListener("change", () => {
+  trEnabled = trToggle.checked;
+  trLang.disabled = !trEnabled;
+  document.body.classList.toggle("no-translation", !trEnabled);
+  if (trEnabled) {
+    ensureWorker().postMessage({ type: "init", lang: trLangCode });
+  }
+});
+
+trLang.addEventListener("change", () => {
+  trLangCode = trLang.value;
+  trEpoch++;
+  if (trEnabled) {
+    ensureWorker().postMessage({ type: "init", lang: trLangCode });
+  }
+});
+
 // Copy / Download
 function getTranscriptText() {
-  return committedLines
+  const source = committedLines
     .map((l) => `[${l.tsStart} - ${l.tsEnd}] ${l.text}`)
     .join("\n");
+  const hasTranslations = committedLines.some((l) => l.translation);
+  if (!hasTranslations) return source;
+  const translated = committedLines
+    .map((l) => `[${l.tsStart} - ${l.tsEnd}] ${l.translation || ""}`)
+    .join("\n");
+  return `${source}\n\n\n${translated}`;
 }
 
 function formatFilename() {

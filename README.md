@@ -24,3 +24,12 @@ Companies charge up to $30/month for meeting transcription services.
 
 90% accuracy. English only. No speaker labelling. 
 <br>But honestly? ChatGPT doesn’t need a perfect transcript to generate an accurate meeting summary.
+
+### Live translation (optional)
+
+Flip the **translate** toggle in the header and pick a target language. Each committed English sentence is translated in real-time by [Opus-MT](https://huggingface.co/Helsinki-NLP) (Helsinki-NLP), running locally in a Web Worker via Transformers.js — still no server, still offline.
+
+- **First-run download**: ~75 MB per language pair, cached in the browser afterwards.
+- **Latency on a 2019 Intel MacBook Pro (CPU)**: typically 0.2–1s per sentence after warm-up. First sentence may take 2–3s.
+- **Supported targets**: French, Spanish, German, Italian, Dutch, Portuguese, Russian, Chinese, Japanese, Arabic, Hindi, Turkish, Polish, Swedish, Greek.
+- Changing the target language mid-meeting translates future sentences in the new language — previous translations are left as-is.

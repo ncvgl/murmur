@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "@moonshine-ai/moonshine-js": "^0.1.29",
     "@ricky0123/vad-web": "^0.0.30",
     "onnxruntime-web": "^1.26.0"
   }

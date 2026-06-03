@@ -9,12 +9,14 @@
 import { MicVAD } from "@ricky0123/vad-web";
 
 const SAMPLE_RATE = 16000;
-// Commit a chunk after this much silence. vad-web's default is 1400ms, which
-// feels laggy; ~700ms matches Moonshine and commits on natural sentence pauses.
-const REDEMPTION_MS = 700;
-// Force-flush a segment that has run this long without a pause, so a non-stop
-// monologue still produces text instead of waiting indefinitely.
-const MAX_SEGMENT_SEC = 12;
+// Commit a chunk after this much silence. vad-web's default 1400ms feels laggy;
+// 1000ms still commits within ~1s of a real pause while merging sub-second gaps
+// into one chunk (fewer chunks = less work).
+const REDEMPTION_MS = 1000;
+// Force-flush a segment that has run this long without a pause. 30s is the sweet
+// spot: it exactly fills Whisper's 30s encoder window, so there's no wasted
+// padding compute and the audio still fits in a single encoder pass.
+const MAX_SEGMENT_SEC = 30;
 const MAX_SEGMENT_SAMPLES = MAX_SEGMENT_SEC * SAMPLE_RATE;
 // Frames kept before speech is detected, so the first word isn't clipped.
 const PREROLL_SAMPLES = 0.5 * SAMPLE_RATE;

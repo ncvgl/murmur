@@ -1,4 +1,4 @@
-import * as Moonshine from "@moonshine-ai/moonshine-js";
+import { MicVAD } from "@ricky0123/vad-web";
 
 const btn = document.getElementById("btn");
 const status = document.getElementById("status");
@@ -6,24 +6,22 @@ const output = document.getElementById("output");
 const timerEl = document.getElementById("timer");
 const copyBtn = document.getElementById("copyBtn");
 const downloadBtn = document.getElementById("downloadBtn");
-const trToggle = document.getElementById("trToggle");
-const trLang = document.getElementById("trLang");
 
 let recording = false;
 let startTime = null;
 let timerInterval = null;
 let speechStartTs = null;
-let lastPartialTime = 0;
 let committedLines = [];
 let nextSentenceId = 1;
 
-// Translation state
-let trWorker = null;
-let trEnabled = false;
-let trLangCode = trLang.value;
-let trEpoch = 0;
+// Silero VAD instance (created lazily on first Start).
+let vad = null;
+let vadReady = false;
 
-document.body.classList.add("no-translation");
+// Whisper transcription worker.
+let worker = null;
+let modelReady = false;
+let device = null;
 
 function formatTime(ms) {
   const totalSec = Math.floor(ms / 1000);
@@ -56,79 +54,42 @@ function isNearBottom() {
   return output.scrollHeight - output.scrollTop - output.clientHeight < 40;
 }
 
+// ---- Transcription worker ----------------------------------------------
+
 function ensureWorker() {
-  if (trWorker) return trWorker;
-  trWorker = new Worker(new URL("./translation-worker.js", import.meta.url), { type: "module" });
-  trWorker.onmessage = (e) => {
+  if (worker) return worker;
+  worker = new Worker(new URL("./transcription-worker.js", import.meta.url), {
+    type: "module",
+  });
+  worker.onmessage = (e) => {
     const msg = e.data;
-    if (msg.type === "loading") {
-      status.textContent = `Loading translation model (${msg.lang})...`;
+    if (msg.type === "device") {
+      device = msg.device;
+    } else if (msg.type === "progress") {
+      if (modelReady) return;
+      const pct = typeof msg.progress === "number" ? Math.round(msg.progress) : null;
+      status.textContent = pct != null
+        ? `Downloading Hebrew model… ${pct}%`
+        : "Downloading Hebrew model…";
     } else if (msg.type === "ready") {
-      status.textContent = recording ? "Listening..." : "Ready.";
-    } else if (msg.type === "translation") {
-      if (msg.epoch !== trEpoch) return;
-      const line = committedLines.find((l) => l.id === msg.id);
-      if (line) line.translation = msg.text;
-      const cell = output.querySelector(`[data-id="${msg.id}"] .translated`);
-      if (cell) {
-        cell.textContent = msg.text;
-        cell.classList.remove("pending");
-      }
-    } else if (msg.type === "translation_error") {
-      const cell = output.querySelector(`[data-id="${msg.id}"] .translated`);
-      if (cell) {
-        cell.textContent = "(translation failed)";
-        cell.classList.remove("pending");
-      }
+      modelReady = true;
+      const where = msg.device === "webgpu" ? "GPU" : "CPU (slower)";
+      status.textContent = recording ? `Listening… (${where})` : `Model ready (${where}).`;
+    } else if (msg.type === "result") {
+      fillLine(msg.id, msg.text);
+    } else if (msg.type === "transcribe_error") {
+      failLine(msg.id, msg.message);
     } else if (msg.type === "error") {
-      status.textContent = `Translation error: ${msg.message}`;
+      status.textContent = `Model error: ${msg.message}`;
     }
   };
-  return trWorker;
+  worker.postMessage({ type: "load" });
+  return worker;
 }
 
-function submitTranslation(id, text) {
-  if (!trEnabled) return;
-  ensureWorker().postMessage({
-    type: "translate",
-    id,
-    text,
-    lang: trLangCode,
-    epoch: trEpoch,
-  });
-}
+// ---- Transcript rendering ----------------------------------------------
 
-function commitText(text) {
-  if (!text.trim()) return;
-  const partial = document.getElementById("partial");
-  if (partial) partial.remove();
-  const tsStart = speechStartTs || getTimestamp();
-  const tsEnd = getTimestamp();
-  const id = nextSentenceId++;
-  const entry = { id, text: text.trim(), tsStart, tsEnd, translation: "" };
-  committedLines.push(entry);
-  const stick = isNearBottom();
-  const line = makeLine(text.trim(), `${tsStart} - ${tsEnd}`, false, id, trEnabled);
-  output.appendChild(line);
-  if (stick) output.scrollTop = output.scrollHeight;
-  speechStartTs = null;
-  submitTranslation(id, entry.text);
-}
-
-function updatePartial(text) {
-  if (!text.trim()) return;
-  const now = Date.now();
-  if (now - lastPartialTime < 1000) return;
-  lastPartialTime = now;
-  const partial = document.getElementById("partial");
-  if (partial) partial.remove();
-  const stick = isNearBottom();
-  const line = makeLine(text.trim(), speechStartTs || getTimestamp(), true, null, false);
-  output.appendChild(line);
-  if (stick) output.scrollTop = output.scrollHeight;
-}
-
-function makeLine(text, timestamp, isPartial, id, showTranslation) {
+function makeLine(text, timestamp, isPartial, id) {
   const line = document.createElement("div");
   line.className = isPartial ? "line partial" : "line";
   if (isPartial) line.id = "partial";
@@ -138,139 +99,160 @@ function makeLine(text, timestamp, isPartial, id, showTranslation) {
   ts.textContent = timestamp;
   const content = document.createElement("span");
   content.className = "text";
+  content.dir = "rtl";
   content.textContent = text;
   line.appendChild(ts);
   line.appendChild(content);
-  if (!isPartial) {
-    const translated = document.createElement("span");
-    translated.className = showTranslation ? "translated pending" : "translated";
-    translated.textContent = showTranslation ? "…" : "";
-    line.appendChild(translated);
-  }
   return line;
 }
 
-// Base Transcriber (not MicrophoneTranscriber) so we can supply a stream with
-// echoCancellation: false — lets the mic acoustically pick up the remote
-// speaker's voice from laptop speakers. Without this, the browser filters it.
-const transcriber = new Moonshine.Transcriber(
-  "model/base",
-  {
-    onModelLoadStarted() {
-      const cached = localStorage.getItem("murmur.modelCached") === "1";
-      status.textContent = cached
-        ? "Loading model..."
-        : "Downloading model (~63 MB)... Takes 1min";
-    },
-    onModelLoaded() {
-      localStorage.setItem("murmur.modelCached", "1");
-      status.textContent = "Model ready.";
-    },
-    onTranscribeStarted() {
-      status.textContent = "Listening...";
-      btn.disabled = false;
-      btn.textContent = "Stop Meeting";
-      btn.classList.add("recording");
-      startTimer();
-    },
-    onTranscribeStopped() {
-      // handled in click handler
-    },
-    onError(error) {
-      console.error("[error]", error);
-      status.textContent = `Error: ${error}`;
-      btn.disabled = false;
-      btn.textContent = "Start Meeting";
-      recording = false;
-    },
-    onSpeechStart() {
-      speechStartTs = getTimestamp();
-    },
-    onSpeechEnd() {},
-    onTranscriptionCommitted(text) {
-      commitText(text);
-    },
-    onTranscriptionUpdated(text) {
-      updatePartial(text);
-    },
-  },
-  true
-);
+// A speech segment ended: drop a pending placeholder line and ask the worker
+// to transcribe it. The text is filled in when the result comes back.
+function addPendingLine() {
+  const tsStart = speechStartTs || getTimestamp();
+  const tsEnd = getTimestamp();
+  const id = nextSentenceId++;
+  committedLines.push({ id, text: "", tsStart, tsEnd });
+  const stick = isNearBottom();
+  const line = makeLine("…", `${tsStart} - ${tsEnd}`, false, id);
+  line.querySelector(".text").classList.add("pending");
+  output.appendChild(line);
+  if (stick) output.scrollTop = output.scrollHeight;
+  speechStartTs = null;
+  return id;
+}
 
-status.textContent = "Ready.";
-btn.disabled = false;
+function fillLine(id, text) {
+  const entry = committedLines.find((l) => l.id === id);
+  const lineEl = output.querySelector(`[data-id="${id}"]`);
+  if (!text || !text.trim()) {
+    // Nothing recognised — drop the empty placeholder.
+    committedLines = committedLines.filter((l) => l.id !== id);
+    if (lineEl) lineEl.remove();
+    return;
+  }
+  if (entry) entry.text = text.trim();
+  if (lineEl) {
+    const cell = lineEl.querySelector(".text");
+    cell.textContent = text.trim();
+    cell.classList.remove("pending");
+  }
+}
 
-let micStream = null;
+function failLine(id, message) {
+  console.error("[transcribe]", message);
+  const entry = committedLines.find((l) => l.id === id);
+  if (entry) entry.text = "(transcription failed)";
+  const cell = output.querySelector(`[data-id="${id}"] .text`);
+  if (cell) {
+    cell.textContent = "(transcription failed)";
+    cell.classList.remove("pending");
+  }
+}
 
-btn.addEventListener("click", async () => {
-  if (!recording) {
-    recording = true;
-    btn.textContent = "Loading...";
-    btn.disabled = true;
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({
+function showPartial() {
+  if (document.getElementById("partial")) return;
+  const stick = isNearBottom();
+  const line = makeLine("🎙 …", speechStartTs || getTimestamp(), true, null);
+  output.appendChild(line);
+  if (stick) output.scrollTop = output.scrollHeight;
+}
+
+function removePartial() {
+  const partial = document.getElementById("partial");
+  if (partial) partial.remove();
+}
+
+// ---- VAD setup ----------------------------------------------------------
+
+async function ensureVad() {
+  if (vad) return vad;
+  vad = await MicVAD.new({
+    model: "v5",
+    // Load the VAD worklet/model and onnxruntime-web WASM from a version-pinned
+    // CDN. Vite's dev server won't let onnxruntime-web import() its wasm .mjs out
+    // of /public, and the app already pulls the Whisper model over the network,
+    // so a CDN for these small assets is the simplest path that works in dev + prod.
+    baseAssetPath: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/",
+    onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/",
+    // Our own stream so we can disable echo cancellation — lets the mic
+    // acoustically pick up a remote speaker from the laptop speakers.
+    getStream: () =>
+      navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
           echoCancellation: false,
           noiseSuppression: true,
           autoGainControl: true,
         },
-      });
-      transcriber.attachStream(micStream);
-      transcriber.start();
+      }),
+    onSpeechStart: () => {
+      speechStartTs = getTimestamp();
+      showPartial();
+    },
+    onVADMisfire: () => {
+      removePartial();
+    },
+    onSpeechEnd: (audio) => {
+      removePartial();
+      const id = addPendingLine();
+      // Transfer the audio buffer to the worker (zero-copy).
+      ensureWorker().postMessage({ type: "transcribe", id, audio }, [audio.buffer]);
+    },
+  });
+  vadReady = true;
+  return vad;
+}
+
+// ---- Controls -----------------------------------------------------------
+
+status.textContent = "Ready.";
+btn.disabled = false;
+
+btn.addEventListener("click", async () => {
+  if (!recording) {
+    recording = true;
+    btn.textContent = "Loading…";
+    btn.disabled = true;
+    try {
+      // Kick off the (large) model download in parallel with VAD init.
+      ensureWorker();
+      if (!modelReady) status.textContent = "Downloading Hebrew model…";
+      await ensureVad();
+      await vad.start();
+      startTimer();
+      btn.disabled = false;
+      btn.textContent = "Stop Meeting";
+      btn.classList.add("recording");
+      if (modelReady) {
+        status.textContent = `Listening… (${device === "webgpu" ? "GPU" : "CPU (slower)"})`;
+      }
     } catch (err) {
-      console.error("[mic]", err);
-      status.textContent = `Mic error: ${err.message || err}`;
+      console.error("[start]", err);
+      status.textContent = `Error: ${err.message || err}`;
       btn.disabled = false;
       btn.textContent = "Start Meeting";
+      btn.classList.remove("recording");
       recording = false;
     }
   } else {
-    transcriber.stop();
+    if (vad) await vad.pause();
     recording = false;
     stopTimer();
+    removePartial();
     btn.textContent = "Start Meeting";
     btn.classList.remove("recording");
     status.textContent = `Stopped at ${timerEl.textContent}.`;
-    const partial = document.getElementById("partial");
-    if (partial) partial.remove();
-    if (micStream) {
-      micStream.getTracks().forEach((t) => t.stop());
-      micStream = null;
-    }
   }
 });
 
-// Translation UI
-trToggle.addEventListener("change", () => {
-  trEnabled = trToggle.checked;
-  trLang.disabled = !trEnabled;
-  document.body.classList.toggle("no-translation", !trEnabled);
-  if (trEnabled) {
-    ensureWorker().postMessage({ type: "init", lang: trLangCode });
-  }
-});
+// ---- Copy / Download ----------------------------------------------------
 
-trLang.addEventListener("change", () => {
-  trLangCode = trLang.value;
-  trEpoch++;
-  if (trEnabled) {
-    ensureWorker().postMessage({ type: "init", lang: trLangCode });
-  }
-});
-
-// Copy / Download
 function getTranscriptText() {
-  const source = committedLines
+  return committedLines
+    .filter((l) => l.text)
     .map((l) => `[${l.tsStart} - ${l.tsEnd}] ${l.text}`)
     .join("\n");
-  const hasTranslations = committedLines.some((l) => l.translation);
-  if (!hasTranslations) return source;
-  const translated = committedLines
-    .map((l) => `[${l.tsStart} - ${l.tsEnd}] ${l.translation || ""}`)
-    .join("\n");
-  return `${source}\n\n\n${translated}`;
 }
 
 function formatFilename() {

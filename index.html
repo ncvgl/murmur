@@ -37,25 +37,6 @@
       gap: 12px;
       margin-bottom: 16px;
     }
-    .trControls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: #888;
-      margin-left: auto;
-    }
-    .trControls select {
-      background: #1a1a1a;
-      color: #ddd;
-      border: 1px solid #333;
-      border-radius: 6px;
-      padding: 4px 6px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .trControls select:disabled { opacity: 0.5; cursor: not-allowed; }
-    .trControls label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
     #status {
       font-size: 14px;
       color: #888;
@@ -86,14 +67,12 @@
     }
     .line {
       display: grid;
-      grid-template-columns: 90px 1fr 1fr;
+      grid-template-columns: 90px 1fr;
       gap: 12px;
       margin-bottom: 8px;
       font-size: 16px;
       line-height: 1.6;
     }
-    body.no-translation .line { grid-template-columns: 90px 1fr; }
-    body.no-translation .line .translated { display: none; }
     .line .ts {
       color: #555;
       font-size: 13px;
@@ -103,13 +82,9 @@
     .line .text {
       color: #ccc;
       word-break: break-word;
+      text-align: right;
     }
-    .line .translated {
-      color: #9ca3af;
-      word-break: break-word;
-      font-style: normal;
-    }
-    .line .translated.pending { color: #555; font-style: italic; }
+    .line .text.pending { color: #555; font-style: italic; }
     .line.partial .text {
       color: #666;
       font-style: italic;
@@ -146,26 +121,6 @@
   </header>
   <div class="statusRow">
     <div id="status">Loading...</div>
-    <div class="trControls">
-      <label><input type="checkbox" id="trToggle"> translate</label>
-      <select id="trLang" disabled>
-        <option value="fr">French</option>
-        <option value="es">Spanish</option>
-        <option value="de">German</option>
-        <option value="it">Italian</option>
-        <option value="nl">Dutch</option>
-        <option value="pt">Portuguese</option>
-        <option value="ru">Russian</option>
-        <option value="zh">Chinese</option>
-        <option value="jap">Japanese</option>
-        <option value="ar">Arabic</option>
-        <option value="hi">Hindi</option>
-        <option value="tr">Turkish</option>
-        <option value="pl">Polish</option>
-        <option value="sv">Swedish</option>
-        <option value="el">Greek</option>
-      </select>
-    </div>
   </div>
   <button id="btn" disabled>Start Meeting</button>
   <div id="output"></div>

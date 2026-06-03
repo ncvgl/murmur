@@ -6,11 +6,13 @@
     "dev": "vite",
     "build": "vite build"
   },
-  "dependencies": {
-    "@moonshine-ai/moonshine-js": "^0.1.29"
-  },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "vite": "^6"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@ricky0123/vad-web": "^0.0.30",
+    "onnxruntime-web": "^1.26.0"
   }
 }

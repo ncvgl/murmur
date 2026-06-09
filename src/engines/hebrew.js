@@ -29,6 +29,16 @@ export function createEngine(sink) {
   let modelReady = false;
   let segId = 0;
   const idMap = new Map(); // worker segment id -> shared sink line id
+  let drainResolvers = []; // resolved once idMap empties (see drain())
+
+  // Once every queued segment has resolved/failed, wake anyone awaiting drain().
+  function checkDrained() {
+    if (idMap.size === 0 && drainResolvers.length) {
+      const resolvers = drainResolvers;
+      drainResolvers = [];
+      resolvers.forEach((resolve) => resolve());
+    }
+  }
 
   // Audio accumulation driven by onFrameProcessed.
   let speaking = false;
@@ -55,11 +65,17 @@ export function createEngine(sink) {
         const lineId = idMap.get(msg.id);
         if (lineId != null) sink.resolvePending(lineId, msg.text);
         idMap.delete(msg.id);
+        checkDrained();
       } else if (msg.type === "transcribe_error") {
         const lineId = idMap.get(msg.id);
         if (lineId != null) sink.failPending(lineId, msg.message);
         idMap.delete(msg.id);
+        checkDrained();
       } else if (msg.type === "error") {
+        // Fatal worker error: nothing more will resolve, so don't leave a
+        // drain() awaiter hanging forever.
+        idMap.clear();
+        checkDrained();
         sink.error(msg.message);
       }
     };
@@ -150,16 +166,36 @@ export function createEngine(sink) {
       });
       await vad.start();
     },
+    // Stop capturing audio. The trailing in-progress segment is flushed into
+    // the transcription queue (so the last words aren't lost) but queued
+    // segments are left to finish — await drain() for those.
     async stop() {
       if (vad) {
         await vad.pause();
         vad = null;
       }
+      if (speaking) flush(); // queue the trailing segment before discarding
       speaking = false;
       frames = [];
       segSamples = 0;
       preRoll = [];
       preRollSamples = 0;
+    },
+    // How many segments are still being transcribed.
+    get pending() {
+      return idMap.size;
+    },
+    // Resolves once every queued segment has been transcribed (or failed).
+    drain() {
+      if (idMap.size === 0) return Promise.resolve();
+      return new Promise((resolve) => drainResolvers.push(resolve));
+    },
+    // Tear down the worker (frees the loaded model).
+    dispose() {
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
     },
   };
 }

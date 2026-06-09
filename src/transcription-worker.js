@@ -41,20 +41,33 @@ async function load() {
 
     postMessage({ type: "device", device });
 
+    // The model is several files (encoder, decoder, configs); transformers.js
+    // reports progress per file, which jumps around if forwarded raw. Aggregate
+    // bytes across all files into one combined percentage.
+    const fileBytes = new Map(); // file -> { loaded, total }
+    function postAggregateProgress() {
+      let loaded = 0;
+      let total = 0;
+      for (const b of fileBytes.values()) {
+        loaded += b.loaded;
+        total += b.total;
+      }
+      const progress = total > 0 ? (loaded / total) * 100 : 0;
+      postMessage({ type: "progress", loaded, total, progress });
+    }
+
     transcriber = await pipeline("automatic-speech-recognition", MODEL_ID, {
       device,
       dtype,
       progress_callback: (p) => {
-        if (p.status === "progress") {
-          postMessage({
-            type: "progress",
-            file: p.file,
-            loaded: p.loaded,
-            total: p.total,
-            progress: p.progress,
-          });
-        } else if (p.status === "ready" || p.status === "done") {
-          postMessage({ type: "progress_status", status: p.status, file: p.file });
+        if (p.status === "progress" && p.total) {
+          fileBytes.set(p.file, { loaded: p.loaded || 0, total: p.total });
+          postAggregateProgress();
+        } else if (p.status === "done" && fileBytes.has(p.file)) {
+          // Pin a finished file to 100% so the aggregate can't slip backwards.
+          const b = fileBytes.get(p.file);
+          b.loaded = b.total;
+          postAggregateProgress();
         }
       },
     });

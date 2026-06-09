@@ -64,5 +64,13 @@ export function createEngine(sink) {
         micStream = null;
       }
     },
+    // Moonshine commits synchronously, so there's never a queue to drain.
+    get pending() {
+      return 0;
+    },
+    drain() {
+      return Promise.resolve();
+    },
+    dispose() {},
   };
 }

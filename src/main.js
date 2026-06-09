@@ -14,6 +14,7 @@ const trToggle = document.getElementById("trToggle");
 const trLang = document.getElementById("trLang");
 
 let recording = false;
+let finishing = false; // stopped listening, still draining the transcription queue
 let currentMode = null; // 'en' | 'he'
 let engine = null;
 
@@ -243,6 +244,7 @@ function showRecordingUI(mode) {
   startEn.style.display = "none";
   startHe.style.display = "none";
   stopBtn.style.display = "block";
+  stopBtn.disabled = false;
   stopBtn.textContent = "Stop Meeting";
   stopBtn.classList.add("recording");
   // Translation controls only make sense on the English path.
@@ -251,10 +253,22 @@ function showRecordingUI(mode) {
   trLang.disabled = lockTr || !trEnabled;
 }
 
+// Stopped listening, but the queue is still draining. Hold the button in a
+// disabled "finishing" state so nothing new is started on top.
+function showFinishingUI() {
+  startEn.style.display = "none";
+  startHe.style.display = "none";
+  stopBtn.style.display = "block";
+  stopBtn.disabled = true;
+  stopBtn.textContent = "Finishing transcription…";
+  stopBtn.classList.remove("recording");
+}
+
 function showIdleUI() {
   startEn.style.display = "";
   startHe.style.display = "";
   stopBtn.style.display = "none";
+  stopBtn.disabled = false;
   stopBtn.classList.remove("recording");
   trToggle.disabled = false;
   trLang.disabled = !trEnabled;
@@ -263,7 +277,7 @@ function showIdleUI() {
 // ---- Start / stop -------------------------------------------------------
 
 async function startMeeting(mode) {
-  if (recording) return;
+  if (recording || finishing) return;
   recording = true;
   currentMode = mode;
   document.body.classList.toggle("mode-he", mode === "he");
@@ -289,13 +303,25 @@ async function startMeeting(mode) {
 
 async function stopMeeting() {
   if (!recording) return;
-  try { await engine?.stop(); } catch (e) { console.error("[stop]", e); }
-  engine = null;
   recording = false;
+  // Stop listening right away; the trailing segment is queued, not dropped.
+  try { await engine?.stop(); } catch (e) { console.error("[stop]", e); }
   stopTimer();
   removePartial();
+  const stoppedAt = timerEl.textContent;
+  // If segments are still being transcribed, hold in a "finishing" state and
+  // let the queue drain calmly — no new audio piles on top.
+  if ((engine?.pending ?? 0) > 0) {
+    finishing = true;
+    showFinishingUI();
+    status.textContent = "Finishing transcription…";
+    try { await engine.drain(); } catch (e) { console.error("[drain]", e); }
+    finishing = false;
+  }
+  try { engine?.dispose?.(); } catch {}
+  engine = null;
   showIdleUI();
-  status.textContent = `Stopped at ${timerEl.textContent}.`;
+  status.textContent = `Stopped at ${stoppedAt}.`;
 }
 
 startEn.addEventListener("click", () => startMeeting("en"));

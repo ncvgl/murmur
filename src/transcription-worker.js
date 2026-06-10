@@ -78,7 +78,30 @@ async function load() {
   return loadPromise;
 }
 
-self.onmessage = async (e) => {
+async function transcribe({ id, audio }) {
+  try {
+    const asr = await load();
+    const out = await asr(audio, {
+      language: "he",
+      task: "transcribe",
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      condition_on_previous_text: false,
+    });
+    const text = (Array.isArray(out) ? out[0]?.text : out?.text) || "";
+    postMessage({ type: "result", id, text: text.trim() });
+  } catch (err) {
+    postMessage({ type: "transcribe_error", id, message: err?.message || String(err) });
+  }
+}
+
+// Inference is async, so an async onmessage would start a new asr() run for
+// every queued message while earlier ones are still awaiting — concurrent
+// inferences whose activation memory stacks up until the machine chokes.
+// Chain jobs instead: exactly one inference in flight at any time.
+let jobQueue = Promise.resolve();
+
+self.onmessage = (e) => {
   const msg = e.data;
 
   if (msg.type === "load") {
@@ -89,20 +112,6 @@ self.onmessage = async (e) => {
   }
 
   if (msg.type === "transcribe") {
-    const { id, audio } = msg;
-    try {
-      const asr = await load();
-      const out = await asr(audio, {
-        language: "he",
-        task: "transcribe",
-        chunk_length_s: 30,
-        stride_length_s: 5,
-        condition_on_previous_text: false,
-      });
-      const text = (Array.isArray(out) ? out[0]?.text : out?.text) || "";
-      postMessage({ type: "result", id, text: text.trim() });
-    } catch (err) {
-      postMessage({ type: "transcribe_error", id, message: err?.message || String(err) });
-    }
+    jobQueue = jobQueue.then(() => transcribe(msg));
   }
 };

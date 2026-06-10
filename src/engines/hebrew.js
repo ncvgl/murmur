@@ -22,11 +22,21 @@ const MAX_SEGMENT_SAMPLES = MAX_SEGMENT_SEC * SAMPLE_RATE;
 const PREROLL_SAMPLES = 0.5 * SAMPLE_RATE;
 // Don't bother transcribing a flush shorter than this.
 const MIN_FLUSH_SAMPLES = 0.2 * SAMPLE_RATE;
+// Emergency cap on segments queued for transcription. Inference is serialized
+// in the worker, so a queued segment is just raw audio (~1.9 MB per 30s) — the
+// backlog drains after Stop, so we keep it generous: 120 segments ≈ an hour of
+// backlogged speech ≈ 230 MB. Only past that are segments dropped (with a
+// visible marker) as a memory backstop.
+const MAX_PENDING_SEGMENTS = 120;
+// Tell the user transcription is lagging once this many segments are queued.
+const BACKLOG_WARN_SEGMENTS = 3;
 
 export function createEngine(sink) {
   let worker = null;
   let vad = null;
   let modelReady = false;
+  let deviceLabel = "";
+  let backlogWarned = false;
   let segId = 0;
   const idMap = new Map(); // worker segment id -> shared sink line id
   let drainResolvers = []; // resolved once idMap empties (see drain())
@@ -37,6 +47,29 @@ export function createEngine(sink) {
       const resolvers = drainResolvers;
       drainResolvers = [];
       resolvers.forEach((resolve) => resolve());
+    }
+  }
+
+  // Surface a lagging queue while still listening; clear the warning once the
+  // worker catches back up. (During drain-after-stop, main.js owns the status.)
+  function updateBacklogStatus() {
+    if (!modelReady || !vad) return;
+    if (idMap.size >= BACKLOG_WARN_SEGMENTS) {
+      backlogWarned = true;
+      sink.status(`Listening… (transcription is ${idMap.size} segments behind)`);
+    } else if (backlogWarned) {
+      backlogWarned = false;
+      sink.ready(deviceLabel);
+    }
+  }
+
+  // Label every pending line with its place in the queue, in idMap insertion
+  // order (= transcription order): the head is being transcribed, the rest wait.
+  function updateQueueIndicators() {
+    let pos = 0;
+    for (const lineId of idMap.values()) {
+      sink.updatePending(lineId, pos === 0 ? "… transcribing" : `… #${pos + 1} in queue`);
+      pos++;
     }
   }
 
@@ -60,16 +93,21 @@ export function createEngine(sink) {
         sink.status(pct != null ? `Downloading Hebrew model… ${pct}%` : "Downloading Hebrew model…");
       } else if (msg.type === "ready") {
         modelReady = true;
-        sink.ready(msg.device === "webgpu" ? "GPU" : "CPU (slower)");
+        deviceLabel = msg.device === "webgpu" ? "GPU" : "CPU (slower)";
+        sink.ready(deviceLabel);
       } else if (msg.type === "result") {
         const lineId = idMap.get(msg.id);
         if (lineId != null) sink.resolvePending(lineId, msg.text);
         idMap.delete(msg.id);
+        updateQueueIndicators();
+        updateBacklogStatus();
         checkDrained();
       } else if (msg.type === "transcribe_error") {
         const lineId = idMap.get(msg.id);
         if (lineId != null) sink.failPending(lineId, msg.message);
         idMap.delete(msg.id);
+        updateQueueIndicators();
+        updateBacklogStatus();
         checkDrained();
       } else if (msg.type === "error") {
         // Fatal worker error: nothing more will resolve, so don't leave a
@@ -90,6 +128,14 @@ export function createEngine(sink) {
     frames = [];
     segSamples = 0;
     if (total < MIN_FLUSH_SAMPLES) return;
+    if (idMap.size >= MAX_PENDING_SEGMENTS) {
+      // Queue is at the safety cap — drop this segment instead of letting the
+      // backlog (and its memory) grow for the rest of the call. Leave a visible
+      // marker so the gap shows in the transcript rather than vanishing.
+      const lineId = sink.beginPending();
+      sink.resolvePending(lineId, "(skipped — transcription overloaded)");
+      return;
+    }
     const audio = new Float32Array(total);
     let offset = 0;
     for (const f of buffered) {
@@ -100,6 +146,8 @@ export function createEngine(sink) {
     const wid = ++segId;
     idMap.set(wid, lineId);
     ensureWorker().postMessage({ type: "transcribe", id: wid, audio }, [audio.buffer]);
+    updateQueueIndicators();
+    updateBacklogStatus();
   }
 
   return {

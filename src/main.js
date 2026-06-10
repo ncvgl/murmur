@@ -169,6 +169,11 @@ const sink = {
     speechStartTs = null;
     return id;
   },
+  // Hebrew: refresh a still-pending line's placeholder (e.g. queue position).
+  updatePending(id, placeholder) {
+    const cell = output.querySelector(`[data-id="${id}"] .text`);
+    if (cell && cell.classList.contains("pending")) cell.textContent = placeholder;
+  },
   resolvePending(id, text) {
     const entry = committedLines.find((l) => l.id === id);
     const lineEl = output.querySelector(`[data-id="${id}"]`);
@@ -314,8 +319,16 @@ async function stopMeeting() {
   if ((engine?.pending ?? 0) > 0) {
     finishing = true;
     showFinishingUI();
-    status.textContent = "Finishing transcription…";
+    const showRemaining = () => {
+      const n = engine?.pending ?? 0;
+      const label = `Finishing transcription… (${n} segment${n === 1 ? "" : "s"} left)`;
+      status.textContent = label;
+      stopBtn.textContent = label;
+    };
+    showRemaining();
+    const drainTicker = setInterval(showRemaining, 500);
     try { await engine.drain(); } catch (e) { console.error("[drain]", e); }
+    clearInterval(drainTicker);
     finishing = false;
   }
   try { engine?.dispose?.(); } catch {}
